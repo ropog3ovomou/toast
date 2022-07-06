@@ -6,11 +6,10 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"fmt"
 	"strings"
 	"text/template"
 
-	"github.com/nu7hatch/gouuid"
 	"syscall"
 )
 
@@ -341,8 +340,10 @@ func Duration(name string) (toastDuration, error) {
 }
 
 func invokeTemporaryScript(content string) error {
-	id, _ := uuid.NewV4()
-	file := filepath.Join(os.TempDir(), id.String()+".ps1")
+	file := makeTemp()
+	if file == "" {
+		return nil
+	}
 	defer os.Remove(file)
 	bomUtf8 := []byte{0xEF, 0xBB, 0xBF}
 	out := append(bomUtf8, []byte(content)...)
@@ -352,8 +353,18 @@ func invokeTemporaryScript(content string) error {
 	}
 	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", "-File", file)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	if err = cmd.Run(); err != nil {
-		return err
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s\n%s", err, out)
 	}
 	return nil
 }
+
+func makeTemp() string {
+	fp, err := os.CreateTemp(os.TempDir(), "*.ps1")
+	if err != nil {
+		return ""
+	}
+	fp.Close()
+	return fp.Name()
+}	
+
